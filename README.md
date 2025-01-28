@@ -33,5 +33,5 @@ To run the project locally, follow these steps:
 ### 1. Clone the Repository
 
 ```bash
-git clone 
-cd 
+git clone https://github.com/apeetdkl/Facial_Recognition.git
+cd  Facial_Recognition
