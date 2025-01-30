@@ -4,20 +4,21 @@ import numpy as np
 from PIL import Image
 import pickle
 
-# Initialize face detector and recognizer
+# Initialize face detector (assuming the cascade classifier file exists)
 face_cascade = cv2.CascadeClassifier('data/haarcascade_frontalface_default.xml')
-recognizer = cv2.face.LBPHFaceRecognizer_create()
-recognizer.read('face_trained.yml') 
+
+# Choose an alternative face recognition algorithm (replace with your choice)
+recognizer = cv2.face.EigenFaceRecognizer_create()  # Example using EigenFaceRecognizer
+
+# Optionally, load a pre-trained model if using a different algorithm
+# recognizer.read('face_trained.yml')  # Replace with your model filename
 
 # Initialize some parameters
 user_name = input("Enter your name: ")
 
 # Set the path to store the user images (in 'users' folder)
-user_folder = os.path.join('users', user_name)  # Create a folder with the user's name inside 'users'
-
-# Create user folder if doesn't exist
-if not os.path.exists(user_folder):
-    os.makedirs(user_folder)
+user_folder = os.path.join('users', user_name)
+os.makedirs(user_folder, exist_ok=True)  # Create user folder if it doesn't exist
 
 # Open video capture
 video = cv2.VideoCapture(0)
@@ -29,10 +30,10 @@ while count < 50:  # Capture 40 images for the user
     frame = cv2.flip(frame, 1)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    
+
     if len(faces) == 0:
         continue  # Skip if no faces are detected
-    
+
     for (x, y, w, h) in faces:
         face = gray[y:y+h, x:x+w]
         file_path = os.path.join(user_folder, f"{user_name}_{count}.jpg")
@@ -49,7 +50,7 @@ cv2.destroyAllWindows()
 
 print("Face images captured successfully.")
 
-# Training the recognizer
+# Training the recognizer (assuming you have collected images)
 print("Training the recognizer...")
 
 face_samples = []
@@ -57,8 +58,8 @@ labels = []
 label_mapping = {}  # Dictionary to store ID-to-name mapping
 label_counter = 0
 
-# Loop through users' folders and load images
-for folder_name in os.listdir('users'):  # Loop through the 'users' folder
+# Loop through users' folders and load images (modify if needed)
+for folder_name in os.listdir('users'):
     folder_path = os.path.join('users', folder_name)
     if os.path.isdir(folder_path):
         for image_name in os.listdir(folder_path):
