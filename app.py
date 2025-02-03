@@ -7,10 +7,15 @@ import time
 import pickle
 import csv
 from datetime import datetime
+from datetime import date
 import pyttsx3  # For text-to-speech functionality
 from PIL import Image
 import shutil 
 import threading
+from streamlit.components.v1 import html
+import base64
+import json
+
 
 # Initialize the text-to-speech engine
 engine = pyttsx3.init()
@@ -121,11 +126,25 @@ user_data = []
 for user in os.listdir(users_folder):
     user_path = os.path.join(users_folder, user)
     if os.path.isdir(user_path):
-        reg_date = time.strftime("%d-%m-%Y", time.gmtime(os.path.getctime(user_path)))
+        reg_date = date.today().strftime("%d-%m-%Y")
         user_data.append({"User Name": user, "Registration Date": reg_date})
 
+# Show Registered Users Table and Add Download Button
 if user_data:
     st.table(pd.DataFrame(user_data))  # Show registered users
+
+    # Add a download button for registered users
+    def convert_users_to_csv(user_data):
+        df_users = pd.DataFrame(user_data)
+        return df_users.to_csv(index=False).encode('utf-8')
+
+    csv_users = convert_users_to_csv(user_data)
+    st.download_button(
+        label="Download Registered Users CSV",
+        data=csv_users,
+        file_name="Registered_Users.csv",
+        mime="text/csv"
+    )
 else:
     st.warning("No users registered yet!")
 # ----------------------- Add User Functionality -----------------------
@@ -142,7 +161,7 @@ def add_user(user_name):
     count = 0
     stframe = st.empty()  # Placeholder
 
-    while count < 50:
+    while count < 60:
         ret, frame = video.read()
         if not ret:
             st.error("Failed to capture video frame.")
@@ -204,7 +223,59 @@ def mark_attendance(user_name):
     return True
 
 
+def get_camera_component():
+    return """
+    <div>
+        <video id="video" autoplay playsinline style="width:640px; height:480px;"></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let stream = null;
 
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                };
+                return true; // Camera started successfully
+            } catch (error) {
+                console.error("Error accessing camera:", error);
+                return false; // Camera failed to start
+            }
+        }
+
+        function captureFrame() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                return canvas.toDataURL('image/jpeg', 0.8);
+            }
+            return null;
+        }
+
+        (async () => {  // Immediately invoked async function
+            if (await startCamera()) { // Check if camera started
+                window.addEventListener('message', (event) => {
+                    if (event.data.type === 'capture_frame') {
+                        const frame = captureFrame();
+                        if (frame) {
+                            window.streamlit.setComponentValue(frame);
+                        }
+                    }
+                });
+            } else {
+                // Handle camera start failure (e.g., display a message)
+                console.error("Camera failed to start. Check permissions and browser settings.");
+                // You could also send a message to Streamlit to indicate failure.
+            }
+        })(); // Call the async function immediately
+    </script>
+    """
 
 # ----------------------- Attendance Handling -----------------------
 # ----------------------- Attendance Handling (Full Code with File Clearing) -----------------------
@@ -230,59 +301,65 @@ if "attendance_message" not in st.session_state:  # Initialize session state
     st.session_state.attendance_message = ""
 
 if st.button("Start Attendance", key="start_attendance_button"):
-    video = cv2.VideoCapture(0)
-    stframe = st.empty()
+    # Create a container for the camera feed
+    camera_container = st.empty()
+    camera_container.html(get_camera_component())
+    
     attended_users = {}
     running = True
     start_time = time.time()
-    timeout = 4
-
-    while running:
-        ret, frame = video.read()
-        if not ret:
-            st.error("Failed to capture frame.")
-            break
-
-        frame = cv2.flip(frame, 1)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = facedetect.detectMultiScale(gray, 1.3, 5)
-
-        for (x, y, w, h) in faces:
-            crop_img = frame[y:y + h, x:x + w, :]
-            crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)
-            resized_img = cv2.resize(crop_img, (50, 50))
-            resized_img = resized_img.flatten().reshape(1, -1)
-
-            output = knn.predict(resized_img)
-            user_name = label_mapping.get(output[0], "Unknown")
-
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 255), 2)
-            cv2.rectangle(frame, (x, y - 40), (x + w, y), (50, 50, 255), -1)
-            cv2.putText(frame, user_name, (x, y - 15), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 1)
-
-            if user_name != "Unknown" and user_name not in attended_users:
-                if mark_attendance(user_name):
-                    timestamp = datetime.now().strftime("%H:%M:%S")
-                    st.session_state.attendance_message = f"✅ Attendance marked for {user_name} at {timestamp}"  # Store in session state
-                    speak("Attendance Marked!")
-                    attended_users[user_name] = True
-                   
-                    break
-
-        if any(attended_users.values()) and time.time() - start_time >= timeout: #Check timeout only if someone has been recognized
+    timeout = 30  # 30 seconds timeout
+    
+    while running and (time.time() - start_time < timeout):
+        try:
+            # Get frame data from the JavaScript component
+            frame_data = st.session_state.get('camera_frame')
+            if frame_data and frame_data.startswith('data:image/jpeg;base64,'):
+                # Decode base64 image
+                _, encoded = frame_data.split(",", 1)
+                image_array = np.frombuffer(base64.b64decode(encoded), dtype=np.uint8)
+                frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+                
+                if frame is not None:
+                    # Process frame for face detection
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    faces = facedetect.detectMultiScale(gray, 1.3, 5)
+                    
+                    for (x, y, w, h) in faces:
+                        crop_img = frame[y:y + h, x:x + w, :]
+                        crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)
+                        resized_img = cv2.resize(crop_img, (50, 50))
+                        resized_img = resized_img.flatten().reshape(1, -1)
+                        
+                        output = knn.predict(resized_img)
+                        user_name = label_mapping.get(output[0], "Unknown")
+                        
+                        if user_name != "Unknown" and user_name not in attended_users:
+                            if mark_attendance(user_name):
+                                timestamp = datetime.now().strftime("%H:%M:%S")
+                                st.session_state.attendance_message = f"✅ Attendance marked for {user_name} at {timestamp}"
+                                speak("Attendance Marked!")
+                                attended_users[user_name] = True
+                                running = False
+                                break
+            
+            time.sleep(0.1)  # Short delay to prevent excessive CPU usage
+            
+        except Exception as e:
+            st.error(f"Error processing frame: {str(e)}")
             running = False
-            break
-
-        key = cv2.waitKey(1)
-        if key == ord('q') or key == ord('Q'):
-            running = False
-
-        stframe.image(frame, channels="BGR", use_container_width=True)
-
+    
+    # Clean up
+    camera_container.empty()
+    if not any(attended_users.values()):
+        st.warning("No users were recognized during the attendance period.")
+    
+    st.rerun()  # Refresh the page to update attendance
     video.release()
     cv2.destroyAllWindows()
-    st.rerun()  # Refresh after attendance
+    
+
+    
 
 
 # Display the message (outside the button's if block)
@@ -290,51 +367,75 @@ if st.session_state.attendance_message:
     st.success(st.session_state.attendance_message)
     st.session_state.attendance_message = ""  # Clear the message
 # ----------------------- Show Attendance Data (Corrected - Version 4) -----------------------
-st.subheader("Today's Attendance")
-date = datetime.now().strftime("%d-%m-%Y")
-attendance_file = f"Attendance/Attendance_{date}.csv"
+st.subheader("📅 View Attendance Records")
 
-# 1. Get *all* registered users
-registered_users = set(os.listdir("Users"))  # Use a set for efficient lookup
+# Allow user to select a date
+selected_date = st.date_input("Select Date:", datetime.now())
+formatted_date = selected_date.strftime("%d-%m-%Y")
+attendance_file = f"Attendance/Attendance_{formatted_date}.csv"
 
-# 2. Filter out deleted users (those whose folders no longer exist)
-existing_registered_users = set()
-for user in registered_users:
-    user_path = os.path.join("Users", user)
-    if os.path.isdir(user_path):  # Check if the folder still exists
-        existing_registered_users.add(user)
+# Check if attendance file exists
+if not os.path.exists(attendance_file):
+    st.warning(f"⚠️ No attendance data available for {formatted_date}.")
+else:
+    # 1. Get all registered users (folders in "Users" directory)
+    registered_users = set(os.listdir("Users"))
 
-# 3. Initialize attendance data (empty initially)
-attendance_data = {}
+    # 2. Filter out deleted users (only existing folders)
+    existing_registered_users = {user for user in registered_users if os.path.isdir(os.path.join("Users", user))}
 
-# 4. Check attendance file and add present users (only for *existing* users)
-if os.path.exists(attendance_file):
+    # 3. Initialize attendance data
+    attendance_data = {}
+
+    # 4. Read attendance file and mark "Present"
     df_attendance = pd.read_csv(attendance_file)
     for user in df_attendance["NAME"].values:
-        if user in existing_registered_users:  # Check if user still exists
+        if user in existing_registered_users:
             attendance_data[user] = "Present"
 
-# 5. Add registered users with faces who are NOT in the attendance file (Absent), but only if they exist
-for user in existing_registered_users:
-    user_path = os.path.join("Users", user)
-    if any(file.endswith(('.jpg', '.png')) for file in os.listdir(user_path)):  # Check for face data
-        if user not in attendance_data:  # Only add if NOT in CSV
+    # 5. Mark "Absent" for registered users with face data but not in attendance file
+    for user in existing_registered_users:
+        user_path = os.path.join("Users", user)
+        has_face_data = any(file.endswith(('.jpg', '.png')) for file in os.listdir(user_path))
+
+        if has_face_data and user not in attendance_data:
             attendance_data[user] = "Absent"
 
-# 6. Add users *without* face data, but only if they exist
-for user in existing_registered_users:
-    user_path = os.path.join("Users", user)
-    if not any(file.endswith(('.jpg', '.png')) for file in os.listdir(user_path)):  # Check for NO face data
-        if user not in attendance_data:
+    # 6. Mark "No Face Data" for users without any images
+    for user in existing_registered_users:
+        user_path = os.path.join("Users", user)
+        has_face_data = any(file.endswith(('.jpg', '.png')) for file in os.listdir(user_path))
+
+        if not has_face_data and user not in attendance_data:
             attendance_data[user] = "No Face Data"
 
+    # 7. Convert to DataFrame
+    attendance_list = [{"NAME": user, "STATUS": status} for user, status in attendance_data.items()]
+    df_final = pd.DataFrame(attendance_list)
 
-# 7. Convert to list of dictionaries
-attendance_list = [{"NAME": user, "STATUS": status} for user, status in attendance_data.items()]
+    # Display attendance table
+    if not df_final.empty:
+        st.success(f"✅ Showing attendance for {formatted_date}")
+        st.table(df_final)
+    
+    else:
+        st.warning(f"⚠️ No attendance data available for {formatted_date}.")
 
-df_final = pd.DataFrame(attendance_list)
-st.table(df_final)
 
+            # Add a download button for attendance
+        # Add a download button for attendance
+    def convert_df_to_csv(df):
+        return df.to_csv(index=False).encode('utf-8')
+
+    csv = convert_df_to_csv(df_final)
+    st.download_button(
+        label="Download Attendance CSV",
+        data=csv,
+        file_name=f"Attendance_{formatted_date}.csv",
+        mime="text/csv"
+    )
+
+       
 # ----------------------- Delete User Functionality (modified) -----------------------
 def delete_user(user_name):
     """Deletes a user, their images, updates the model, and removes attendance records."""

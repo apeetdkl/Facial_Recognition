@@ -1,37 +1,121 @@
-# face_recognition_project
-# Attendance System with Face Recognition
+Face Recognition Attendance System
 
-## Project Overview
+Overview
 
-This project is an **Attendance System** that utilizes **Face Recognition** to automatically mark the attendance of users based on their facial features. The system is built using **Streamlit**, **OpenCV**, and **Python**. It allows users to register their faces and automatically mark attendance when they are detected in front of the camera.
+This project is a Face Recognition Attendance System built using Streamlit, OpenCV, and Machine Learning (KNN). It allows users to:
 
-The project is designed to be user-friendly, real-time, and efficient for handling attendance in various environments like classrooms, offices, etc.
+Register users with face images.
 
-## Features
+Train and retrain a KNN-based face recognition model.
 
-- **Face Registration**: Users can register their faces by adding their photos into the `Users` folder.
-- **Automatic Attendance Marking**: When the user faces the camera, their face is detected and their attendance is automatically recorded.
-- **Attendance Logging**: Attendance is recorded with timestamps and saved in CSV files for each day.
-- **Text-to-Speech Integration**: When attendance is marked, the system will speak out the user's name as a confirmation.
-- **User-Friendly Interface**: The attendance system has a simple web-based interface using Streamlit, making it easy to interact with and monitor attendance.
-- **Live Face Recognition**: The system uses OpenCV's `Haar Cascade` for face detection and a KNN (K-Nearest Neighbors) model for recognition.
+Mark attendance using face recognition.
 
-## Technologies Used
+View and manage attendance records.
 
-- **Streamlit**: For building the web application interface.
-- **OpenCV**: For face detection and recognition.
-- **Python**: The core programming language for this project.
-- **pyttsx3**: For text-to-speech functionality.
-- **Pickle**: For loading the pre-trained KNN model and label mapping.
-- **Pandas**: For handling and displaying attendance data.
-- **NumPy**: For numerical operations during image processing.
+Delete registered users and update the system accordingly.
 
-## Setup Instructions
+Features
 
-To run the project locally, follow these steps:
+✅ User Registration – Capture face images and store them securely.
+✅ Face Recognition – Identify users and mark attendance automatically.
+✅ Attendance Tracking – Record and display attendance data.
+✅ Model Retraining – Automatically update the recognition model when new users are added.
+✅ User Deletion – Remove users and update records seamlessly.
+✅ Speech Notification – Uses text-to-speech to confirm attendance marking.
 
-### 1. Clone the Repository
+Tech Stack
 
-```bash
-git clone https://github.com/apeetdkl/Facial_Recognition.git
-cd  Facial_Recognition
+Programming Language: Python
+
+Framework: Streamlit
+
+Libraries Used:
+
+OpenCV – For image processing and face detection.
+
+NumPy & Pandas – For data handling.
+
+pyttsx3 – For text-to-speech.
+
+Scikit-learn – For KNN-based face recognition.
+
+PIL – For image manipulation.
+
+Installation & Setup
+
+1️⃣ Install Dependencies
+
+Ensure you have Python installed (>=3.7). Then, install the required libraries:
+
+pip install streamlit opencv-python numpy pandas pyttsx3 scikit-learn pillow
+
+2️⃣ Run the Application
+
+Execute the following command:
+
+streamlit run app.py
+
+Usage
+
+➤ Register a New User
+
+Navigate to the "Registered Users" section.
+
+Enter a new user name.
+
+The system will capture 50 face images and store them.
+
+The model will automatically retrain with the new user data.
+
+➤ Mark Attendance
+
+Click the Start Attendance button.
+
+The webcam will recognize faces and mark attendance in a CSV file.
+
+The system will announce attendance using text-to-speech.
+
+➤ View Attendance
+
+The "Today's Attendance" section displays the current day's attendance.
+
+Attendance data is stored in the Attendance folder as CSV files.
+
+➤ Delete a User
+
+Select a user from the dropdown list.
+
+Click Delete User to remove their data and retrain the model.
+
+Attendance records related to the user will also be deleted.
+
+Project Structure
+
+📂 Face Recognition Attendance System
+│── 📂 Users            # Stores user images
+│── 📂 Attendance       # Stores attendance CSV files
+│── 📂 data             # Stores model and label mapping
+     │── haarcascade_frontalface_default.xml  # Face detection model
+     │──faces_data.pkl #face datas for training
+     │──names.pkl      #names for traning
+│── app.py             # Main application script
+│── model_trained_knn.pkl # Trained KNN model
+
+
+Future Enhancements
+
+📌 Implement Deep Learning (CNN) for improved accuracy.
+
+📌 Add Multi-Camera Support for larger classrooms.
+
+📌 Enhance UI/UX using Streamlit components.
+
+📌 Export Attendance Data in different formats (Excel, PDF).
+
+Author
+
+👨‍💻 Developed by: [Your Name]📧 Contact: your.email@example.com
+
+License
+
+This project is licensed under the MIT License. Feel free to modify and improve!
